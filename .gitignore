@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+outputs/
+datasets/
+wandb/
+*.safetensors
+*.pt
+*.pth
+*.mp4
+.vscode/

@@ -1,0 +1,20 @@
+{
+  "policy": "smolvla",
+  "model_id": "lerobot/smolvla_base",
+  "prompt": "pick the yellow cube and put it in the yellow box",
+  "episodes": 50,
+  "seeds": "1000..1049",
+  "time_limit_s": 30.0,
+  "successes": 0,
+  "success_rate": 0.0,
+  "success_rate_95ci": [
+    0.0,
+    0.071
+  ],
+  "completion_time_mean_s": null,
+  "completion_time_median_s": null,
+  "failure_modes": {
+    "barely moved": 50
+  },
+  "model_thinking_per_chunk_mean_s": 0.64
+}
