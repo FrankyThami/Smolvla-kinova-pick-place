@@ -9,3 +9,4 @@ wandb/
 *.pth
 *.mp4
 .vscode/
+desktop.ini
