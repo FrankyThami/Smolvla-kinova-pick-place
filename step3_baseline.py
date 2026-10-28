@@ -65,6 +65,9 @@ def failure_mode(success: bool, max_excursion: float, min_dist: float, max_lift:
 
 def run_episode(env, agent, prompt, seed, video_path=None):
     obs, info = env.reset(seed=seed)
+    if os.environ.get("SWAP_SIDES"):   # mirror the scene: cube on the LEFT, box on the RIGHT
+        c, b = info["cube_pos"], info["box_pos"]
+        obs, info = env.reset(seed=seed, cube_xy=(c[0], -c[1]), box_xy=(b[0], -b[1]))
     agent.reset()
     cube0, box0 = info["cube_pos"].copy(), info["box_pos"].copy()
     start_ee = obs["ee_pos"].copy()
