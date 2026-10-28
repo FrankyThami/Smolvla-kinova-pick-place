@@ -1,0 +1,21 @@
+{
+  "policy": "smolvla",
+  "model_id": "outputs\\train_gen3_v2\\checkpoints\\010000\\pretrained_model",
+  "prompt": "pick the yellow cube and put it in the yellow box",
+  "episodes": 50,
+  "seeds": "1000..1049",
+  "time_limit_s": 30.0,
+  "successes": 28,
+  "success_rate": 0.56,
+  "success_rate_95ci": [
+    0.423,
+    0.688
+  ],
+  "completion_time_mean_s": 7.56,
+  "completion_time_median_s": 6.68,
+  "failure_modes": {
+    "reached the cube but never lifted it": 21,
+    "lifted the cube but did not put it in the box": 1
+  },
+  "model_thinking_per_chunk_mean_s": 0.47
+}

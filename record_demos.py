@@ -71,6 +71,7 @@ def main():
     p.add_argument("--prompt", default="pick the yellow cube and put it in the yellow box")
     p.add_argument("--out", default=os.path.join(HERE, "datasets", "gen3_pickplace"))
     p.add_argument("--overwrite", action="store_true", help="delete an existing dataset in --out first")
+    p.add_argument("--random-sides", action="store_true", help="every second episode is mirrored: cube on the LEFT, box on the RIGHT")
     args = p.parse_args()
 
     if os.path.exists(args.out):
@@ -87,6 +88,9 @@ def main():
     while saved < args.episodes:
         tried += 1
         obs, info = env.reset(seed=seed)
+        if args.random_sides and seed % 2 == 1:      # odd seeds: mirror the scene (cube left, box right)
+            c, b = info["cube_pos"], info["box_pos"]
+            obs, info = env.reset(seed=seed, cube_xy=(c[0], -c[1]), box_xy=(b[0], -b[1]))
         actions = plan_episode(env, np.random.default_rng(seed))
         seed += 1
         if actions is None:
@@ -125,7 +129,7 @@ def main():
     print(f"Recorded {saved} successful demonstrations ({tried} attempts)")
     print(f"  frames in total : {ds.meta.total_frames}  (about {ds.meta.total_frames / saved / 20:.1f} s per demonstration)")
     print(f"  folder          : {args.out}   ({size_mb:.0f} MB)")
-    with open(os.path.join(os.path.dirname(args.out), "gen3_pickplace_info.json"), "w") as f:
+    with open(os.path.join(os.path.dirname(args.out), os.path.basename(args.out) + "_info.json"), "w") as f:
         json.dump({"episodes": saved, "frames": ds.meta.total_frames, "first_seed": args.start_seed,
                    "last_seed": seed - 1, "prompt": args.prompt}, f, indent=2)
 

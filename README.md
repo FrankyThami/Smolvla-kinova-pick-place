@@ -32,6 +32,20 @@ Mirroring the layout (cube left, box right, same 50 seeds, `SWAP_SIDES=1`) makes
 43 of the 50 failures never reached the cube, so the 58-72% only holds for the training layout. The model learned the
 motion of the training scenes, not "find the cube and the box". Next step: demonstrations with randomised sides.
 
+## Round 2: training on both layouts
+Round 1 failed on the mirrored layout (0/50) because every training demo had the cube on the right. Round 2 re-records
+200 demos (every second episode mirrored) and fine-tunes with the same 10,000 steps:
+
+| Layout | Round 1 model | Round 2 model | Round 2 + re-plan every 10 steps |
+|---|---|---|---|
+| Standard (cube right, box left) | 29/50 = 58% (44-71%) | 16/50 = 32% (21-46%) | 28/50 = 56% (42-69%) |
+| Mirrored (cube left, box right) | 0/50 = 0% (0-7%) | 30/50 = 60% (46-72%) | 31/50 = 62% (48-74%) |
+| Both layouts | 29/100 = 29% | 46/100 = 46% (37-56%) | 59/100 = 59% (49-68%) |
+
+Varied demonstrations fixed the mirrored layout. With default settings, accuracy on the standard layout dropped
+(the same training budget is now spread over twice the variety); re-planning every 10 steps recovered most of it.
+Almost all remaining failures are grasps (reached the cube, never lifted it: 21 of 22 and 18 of 19 failures).
+
 ## Pipeline
 1. **Scene** - MuJoCo: Kinova Gen3 (7-DoF) + Robotiq 2F-85, table, yellow cube/box, front + wrist cameras.
 2. **Adapter** (`vla_agent.py`) - maps the 7-DoF arm to SmolVLA's 6-number state/action interface.
@@ -90,6 +104,7 @@ results/               final 50-episode summaries and per-episode CSVs (standard
 ## Next steps
 Demonstrations with randomised sides, a colour-instruction test (green vs yellow cube),
 and a comparison with other small policies (Evo-1, ACT) on the same data and seeds.
+
 
 ## Credits
 SmolVLA / LeRobot (Hugging Face), robot models from
