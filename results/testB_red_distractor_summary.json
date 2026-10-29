@@ -1,0 +1,32 @@
+{
+  "target": "yellow",
+  "prompt": "pick the yellow cube and put it in the yellow box",
+  "model_id": "outputs\\train_gen3_v2\\checkpoints\\010000\\pretrained_model",
+  "replan_every": 10,
+  "episodes": 30,
+  "seeds": "1000..1029",
+  "successes": 0,
+  "success_rate": 0.0,
+  "success_rate_95ci": [
+    0.0,
+    0.114
+  ],
+  "completion_time_mean_s": null,
+  "placement_error_mean_m": null,
+  "wrong_cube_lifted": 0,
+  "wrong_cube_in_box": 0,
+  "wrong_cube_disturbed": 3,
+  "first_touched": {
+    "yellow": 10,
+    "red": 5,
+    "none": 14,
+    "both": 1
+  },
+  "episodes_that_touched_a_cube": 16,
+  "grasp_attempts_mean": 0.67,
+  "failure_modes": {
+    "reached the cube but never lifted it": 14,
+    "never reached the cube": 13,
+    "lifted the cube but did not put it in the box": 3
+  }
+}

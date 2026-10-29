@@ -12,6 +12,11 @@ Examples:
     python step3_baseline.py --episodes 20                                   # the real baseline
     python step3_baseline.py --episodes 50                                   # the final, more reliable number
 
+Optional switches (environment variables):
+    SMOLVLA_REPLAN=10   look at the cameras again every 10 steps (default 50)
+    SWAP_SIDES=1        mirrored scene: cube on the LEFT, box on the RIGHT
+    LAYOUT=<name>       a held-out test layout: centre_cube, box_centre, same_side, far_x, near_x
+
 IMPORTANT: the episodes always use the same seeds (default 1000, 1001, 1002, ...). In Step 5 we run the
 fine-tuned model on exactly these seeds, so the "before" and "after" numbers are a fair comparison.
 
@@ -38,6 +43,32 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BARELY_MOVED = 0.10     # the hand never got more than 10 cm away from where it started
 REACHED_CUBE = 0.06     # the hand came closer than 6 cm to the cube at some moment
 LIFTED = 0.03           # the cube was lifted more than 3 cm above the table at some moment
+NEAR_CUBE = 0.08        # a "grasp attempt" = the gripper is told to close while the hand is within 8 cm of the cube
+
+# Held-out layouts for the final tests (the training data only had cube x 0.35-0.55 / |y| 0.10-0.25 and
+# box x 0.35-0.55 / |y| 0.12-0.25, on opposite sides). Cube and box are always at least 17 cm apart.
+LAYOUTS = ("centre_cube", "box_centre", "same_side", "far_x", "near_x")
+
+
+def sample_layout(layout: str, rng):
+    """Returns ((cube_x, cube_y), (box_x, box_y)) for one episode. Same seed -> same positions."""
+    U = rng.uniform
+    for _ in range(100):
+        if layout == "centre_cube":      # cube near the centre line, box far left or far right
+            c = (U(0.35, 0.55), U(-0.05, 0.05)); s = rng.choice([-1, 1]); b = (U(0.35, 0.55), s * U(0.15, 0.25))
+        elif layout == "box_centre":     # box near the centre line, cube far left or far right
+            b = (U(0.35, 0.55), U(-0.05, 0.05)); s = rng.choice([-1, 1]); c = (U(0.35, 0.55), s * U(0.15, 0.25))
+        elif layout == "same_side":      # cube and box on the same side, separated in y
+            s = rng.choice([-1, 1]); c = (U(0.35, 0.55), s * U(0.17, 0.25)); b = (U(0.35, 0.55), s * U(0.0, 0.07))
+        elif layout == "far_x":          # further away from the robot than anything seen in training
+            s = rng.choice([-1, 1]); c = (U(0.56, 0.62), s * U(0.10, 0.25)); b = (U(0.56, 0.62), -s * U(0.12, 0.25))
+        elif layout == "near_x":         # closer to the robot than anything seen in training
+            s = rng.choice([-1, 1]); c = (U(0.28, 0.34), s * U(0.10, 0.25)); b = (U(0.28, 0.34), -s * U(0.12, 0.25))
+        else:
+            raise ValueError(f"unknown LAYOUT '{layout}', choose one of {LAYOUTS}")
+        if np.hypot(c[0] - b[0], c[1] - b[1]) >= 0.17:
+            break
+    return (float(c[0]), float(c[1])), (float(b[0]), float(b[1]))
 
 
 def wilson_interval(k: int, n: int, z: float = 1.96):
@@ -65,7 +96,11 @@ def failure_mode(success: bool, max_excursion: float, min_dist: float, max_lift:
 
 def run_episode(env, agent, prompt, seed, video_path=None):
     obs, info = env.reset(seed=seed)
-    if os.environ.get("SWAP_SIDES"):   # mirror the scene: cube on the LEFT, box on the RIGHT
+    layout = os.environ.get("LAYOUT", "")
+    if layout:                         # a held-out layout (positions come from the seed)
+        c, b = sample_layout(layout, np.random.default_rng(seed))
+        obs, info = env.reset(seed=seed, cube_xy=c, box_xy=b)
+    elif os.environ.get("SWAP_SIDES"):   # mirror the scene: cube on the LEFT, box on the RIGHT
         c, b = info["cube_pos"], info["box_pos"]
         obs, info = env.reset(seed=seed, cube_xy=(c[0], -c[1]), box_xy=(b[0], -b[1]))
     agent.reset()
@@ -75,6 +110,7 @@ def run_episode(env, agent, prompt, seed, video_path=None):
     min_dist = float(np.linalg.norm(obs["ee_pos"] - cube0))
     max_lift = 0.0
     max_grip = float(obs["state"][7])
+    grip_closed, grasp_attempts = False, 0   # grasp attempt = a "close" command near the cube
     writer = None
     if video_path:
         writer = imageio.get_writer(video_path, fps=int(round(env.control_hz)), codec="libx264", macro_block_size=1)
@@ -83,6 +119,13 @@ def run_episode(env, agent, prompt, seed, video_path=None):
     steps = 0
     while True:
         action = agent.act(obs, prompt)
+        g = float(action[7])
+        if not grip_closed and g > 0.6:      # gripper starts closing
+            grip_closed = True
+            if float(np.linalg.norm(obs["ee_pos"] - info["cube_pos"])) < NEAR_CUBE:
+                grasp_attempts += 1
+        elif grip_closed and g < 0.3:        # gripper opened again
+            grip_closed = False
         obs, _, terminated, truncated, info = env.step(action)
         steps += 1
         ee, cube = obs["ee_pos"], info["cube_pos"]
@@ -103,6 +146,7 @@ def run_episode(env, agent, prompt, seed, video_path=None):
     success = bool(info["success"])
     return {
         "seed": seed,
+        "layout": layout or ("mirrored" if os.environ.get("SWAP_SIDES") else "standard"),
         "success": int(success),
         "completion_time_s": round(info["success_time"], 2) if success else "",
         "sim_seconds": round(info["sim_time"], 2),
@@ -112,6 +156,8 @@ def run_episode(env, agent, prompt, seed, video_path=None):
         "max_cube_lift_m": round(max_lift, 3),
         "max_gripper_closure": round(max_grip, 2),
         "final_cube_to_box_m": round(float(np.linalg.norm(info["cube_pos"][:2] - box0[:2])), 3),
+        "replans": n_chunks,
+        "grasp_attempts": grasp_attempts,
         "thinking_per_chunk_s": round(thinking / n_chunks, 2),
         "wall_seconds": round(wall, 1),
         "cube_x": round(float(cube0[0]), 3), "cube_y": round(float(cube0[1]), 3),
@@ -133,7 +179,7 @@ def main():
     env = PickPlaceEnv(camera_names=("front", "wrist"), max_seconds=args.max_seconds)
     agent = DummyAgent(seed=0) if args.policy == "dummy" else SmolVLAAgent(args.model_id)
 
-    out_dir = os.path.join(HERE, "outputs", "step3", f"{datetime.now():%Y%m%d_%H%M%S}_{args.policy}")
+    out_dir = os.path.join(HERE, "outputs", "step3", f"{datetime.now():%Y%m%d_%H%M%S}_{args.policy}" + (f"_{os.environ['LAYOUT']}" if os.environ.get("LAYOUT") else ""))
     os.makedirs(out_dir, exist_ok=True)
     print(f'\nPrompt: "{args.prompt}"')
     print(f"{args.episodes} episodes, seeds {args.start_seed}..{args.start_seed + args.episodes - 1}, "
@@ -156,7 +202,12 @@ def main():
     lo, hi = wilson_interval(k, n)
     times = [r["completion_time_s"] for r in rows if r["success"]]
     modes = Counter(r["failure_mode"] for r in rows if not r["success"])
+    place_err = [r["final_cube_to_box_m"] for r in rows if r["success"]]
+    attempted = [r for r in rows if r["grasp_attempts"] >= 1]
+    retried = [r for r in rows if r["grasp_attempts"] >= 2]
     summary = {
+        "layout": os.environ.get("LAYOUT") or ("mirrored" if os.environ.get("SWAP_SIDES") else "standard"),
+        "replan_every": agent.n_action_steps,
         "policy": args.policy,
         "model_id": args.model_id if args.policy == "smolvla" else None,
         "prompt": args.prompt,
@@ -169,6 +220,12 @@ def main():
         "completion_time_mean_s": round(float(np.mean(times)), 2) if times else None,
         "completion_time_median_s": round(float(np.median(times)), 2) if times else None,
         "failure_modes": dict(modes),
+        "placement_error_mean_m": round(float(np.mean(place_err)), 3) if place_err else None,
+        "episodes_with_a_grasp_attempt": len(attempted),
+        "episodes_with_a_retry": len(retried),
+        "retry_then_success": sum(r["success"] for r in retried),
+        "grasp_attempts_mean": round(float(np.mean([r["grasp_attempts"] for r in rows])), 2),
+        "replans_mean": round(float(np.mean([r["replans"] for r in rows])), 1),
         "model_thinking_per_chunk_mean_s": round(float(np.mean([r["thinking_per_chunk_s"] for r in rows])), 2),
     }
     with open(os.path.join(out_dir, "results.csv"), "w", newline="") as f:
@@ -183,8 +240,12 @@ def main():
     print(f"  success rate    : {k}/{n} = {100 * k / n:.1f}%   (95% confidence interval {100 * lo:.1f}% - {100 * hi:.1f}%)")
     if times:
         print(f"  completion time : mean {np.mean(times):.1f} s, median {np.median(times):.1f} s (simulated, successes only)")
+        print(f"  placement error : mean {1000 * np.mean(place_err):.0f} mm from the box centre (successes only)")
     else:
         print("  completion time : n/a (no successful episode)")
+    print(f"  grasp attempts  : {summary['grasp_attempts_mean']} per episode on average; "
+          f"{len(retried)} episodes tried again, {summary['retry_then_success']} of those succeeded")
+    print(f"  re-plans        : {summary['replans_mean']} per episode (looked at the cameras again)")
     for mode, count in modes.most_common():
         print(f"  failed because  : {mode}: {count}")
     print(f"  model thinking  : {summary['model_thinking_per_chunk_mean_s']} s per chunk of {agent.n_action_steps} actions")

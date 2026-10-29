@@ -1,0 +1,29 @@
+{
+  "layout": "centre_cube",
+  "replan_every": 10,
+  "policy": "smolvla",
+  "model_id": "outputs\\train_gen3_v2\\checkpoints\\010000\\pretrained_model",
+  "prompt": "pick the yellow cube and put it in the yellow box",
+  "episodes": 20,
+  "seeds": "1000..1019",
+  "time_limit_s": 30.0,
+  "successes": 3,
+  "success_rate": 0.15,
+  "success_rate_95ci": [
+    0.052,
+    0.36
+  ],
+  "completion_time_mean_s": 8.38,
+  "completion_time_median_s": 8.6,
+  "failure_modes": {
+    "reached the cube but never lifted it": 6,
+    "never reached the cube": 11
+  },
+  "placement_error_mean_m": 0.031,
+  "episodes_with_a_grasp_attempt": 7,
+  "episodes_with_a_retry": 0,
+  "retry_then_success": 0,
+  "grasp_attempts_mean": 0.35,
+  "replans_mean": 54.5,
+  "model_thinking_per_chunk_mean_s": 0.54
+}
